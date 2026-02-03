@@ -5,73 +5,161 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Studio Tour • Kitchen & Bathroom Results</title>
 
+  <!-- 360 viewer (Pannellum) -->
   <link rel="stylesheet" href="https://cdn.pannellum.org/2.5/pannellum.css" />
   <script src="https://cdn.pannellum.org/2.5/pannellum.js"></script>
 
+  <!-- Charts (Plotly) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
 
   <style>
-    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b0c10;color:#fff}
-    #panorama{width:100vw;height:100vh}
-    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;z-index:100;padding:18px}
-    .modal{max-width:980px;margin:60px auto;background:#fff;color:#111;border-radius:16px;overflow:hidden}
-    .modal-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #eee}
-    .modal-header h2{margin:0;font-size:15px}
-    .modal-header button{border:0;border-radius:10px;padding:8px 10px;cursor:pointer;background:#f2f2f2}
-    .modal-body{padding:12px 14px}
-    #chart{width:100%;height:420px}
-    .hint{position:fixed;left:12px;bottom:12px;z-index:50;background:rgba(255,255,255,.08);
-      border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(10px);padding:10px 12px;border-radius:14px;max-width:520px}
-    .hint b{color:#fff}
-    .muted{opacity:.85;font-size:13px;line-height:1.45}
+    :root{
+      --bg: #0b0c10;
+      --card: rgba(255,255,255,0.08);
+      --border: rgba(255,255,255,0.16);
+      --text: rgba(255,255,255,0.92);
+      --muted: rgba(255,255,255,0.72);
+    }
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    #panorama{ width:100vw; height:100vh; }
+
+    /* Floating hint */
+    .hint{
+      position:fixed;
+      left:12px; bottom:12px;
+      z-index:50;
+      background: var(--card);
+      border:1px solid var(--border);
+      backdrop-filter: blur(10px);
+      padding:10px 12px;
+      border-radius:14px;
+      max-width: 560px;
+    }
+    .hint .title{ font-weight:700; margin-bottom:6px; }
+    .hint .muted{ color: var(--muted); font-size:13px; line-height:1.45; }
+    .hint .row{ display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .btn{
+      border:1px solid var(--border);
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      padding:8px 10px;
+      border-radius:12px;
+      cursor:pointer;
+      font: inherit;
+    }
+    .btn:hover{ background: rgba(255,255,255,0.10); }
+
+    /* Modal */
+    .modal-backdrop{
+      position:fixed; inset:0;
+      background:rgba(0,0,0,.65);
+      display:none;
+      z-index:100;
+      padding: 18px;
+    }
+    .modal{
+      max-width: 980px;
+      margin: 50px auto;
+      background:#fff;
+      color:#111;
+      border-radius:16px;
+      overflow:hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    .modal-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding: 12px 14px;
+      border-bottom:1px solid #eee;
+    }
+    .modal-header h2{ margin:0; font-size:15px; }
+    .modal-header button{
+      border:0;
+      border-radius:10px;
+      padding:8px 10px;
+      cursor:pointer;
+      background:#f2f2f2;
+    }
+    .modal-body{ padding: 12px 14px 14px; }
+    #chart{ width:100%; height:420px; }
+    #lastUpdated{ margin-top:8px; font-size:12px; opacity:.8; }
+
+    @media (max-width: 720px){
+      .hint{ max-width: calc(100% - 24px); }
+      #chart{ height: 320px; }
+    }
   </style>
 </head>
 <body>
 
-<div id="panorama"></div>
+  <div id="panorama"></div>
 
-<div class="hint">
-  <div style="font-weight:650;margin-bottom:6px;">Studio Tour (Demo)</div>
-  <div class="muted">
-    Use arrows to move rooms. Click:
-    <b>🚰 Kitchen sink</b> or <b>🚿 Bathroom sink</b> to open graphs.
-    Data refresh: <b>every 5 minutes</b>.
-  </div>
-</div>
-
-<div class="modal-backdrop" id="modalBackdrop" onclick="closeModalIfBackdrop(event)">
-  <div class="modal" role="dialog" aria-modal="true">
-    <div class="modal-header">
-      <h2 id="modalTitle">Result</h2>
-      <button onclick="closeModal()">Close ✕</button>
+  <div class="hint">
+    <div class="title">Studio Tour (Live Demo)</div>
+    <div class="muted">
+      Use arrows to move rooms (Hall → Kitchen → Bathroom). Click:
+      <b>🚰 Kitchen sink</b> or <b>🚿 Bathroom sink</b> to open graphs.
+      Auto-refresh: <b>every 5 minutes</b>.
     </div>
-    <div class="modal-body">
-      <div id="chart"></div>
-      <div id="lastUpdated" style="margin-top:8px;font-size:12px;opacity:.8;"></div>
+    <div class="row">
+      <button class="btn" onclick="go('hall')">Hall</button>
+      <button class="btn" onclick="go('kitchen')">Kitchen</button>
+      <button class="btn" onclick="go('bathroom')">Bathroom</button>
+      <button class="btn" onclick="openSink('kitchen_sink')">Open 🚰 Kitchen graph</button>
+      <button class="btn" onclick="openSink('bathroom_sink')">Open 🚿 Bathroom graph</button>
     </div>
   </div>
-</div>
+
+  <!-- Modal -->
+  <div class="modal-backdrop" id="modalBackdrop" onclick="closeModalIfBackdrop(event)">
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-header">
+        <h2 id="modalTitle">Result</h2>
+        <button onclick="closeModal()">Close ✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="chart"></div>
+        <div id="lastUpdated"></div>
+      </div>
+    </div>
+  </div>
 
 <script>
-  // =========================
-  // 1) SET YOUR API URL HERE
-  // =========================
-  const API_BASE_URL = "https://script.google.com/macros/s/AKfycbySPN9aYF-h-FV-LzL-tOzGHNloP8kaSLuh1eUcuHkSY2Dm_L3OBrIi_PuaWM9yXgPImg/exec"; // e.g. https://script.google.com/macros/s/XXXX/exec
+  // ==========================================================
+  // 1) YOUR API (Apps Script Web App) - already working for you
+  // ==========================================================
+  const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwce1RCf-lByZPa0fEkC4fvUSUxzyyGS90TS5Oorj9Q13LFYDxp1BL8XypZzEj1rqUmBQ/exec";
 
   // Refresh every 5 minutes
   const REFRESH_MS = 5 * 60 * 1000;
 
-  // Placeholder online panoramas:
-  // Hall: Pannellum demo (alma.jpg)  (kitchen/bath are placeholders from Wikimedia)
+  // ==========================================================
+  // 2) YOUR 360 PHOTOS (replace with your studio apartment URLs)
+  //    Must be equirectangular 2:1 panorama JPG/PNG.
+  // ==========================================================
   const PANOS = {
-    hall: "https://pannellum.org/images/alma.jpg",
-    kitchen: "https://commons.wikimedia.org/wiki/Special:FilePath/Noyon_Cathedral_Interior_360x180,_Picardy,_France_-_Diliff.jpg?width=4096",
-    bathroom: "https://commons.wikimedia.org/wiki/Special:FilePath/St_Etheldreda%27s_Church_Interior_360x180,_London,_UK_-_Diliff.jpg?width=4096"
+    hall:     "PASTE_YOUR_HALL_360_IMAGE_URL_HERE",
+    kitchen:  "PASTE_YOUR_KITCHEN_360_IMAGE_URL_HERE",
+    bathroom: "PASTE_YOUR_BATHROOM_360_IMAGE_URL_HERE"
   };
 
-  let viewer;
+  // If you currently have only one 360 image, you can do:
+  // PANOS.hall = PANOS.kitchen = PANOS.bathroom = "ONE_IMAGE_URL";
+
+  // -----------------------------
+  // Modal helpers
+  // -----------------------------
   let activeSink = null;
   let refreshTimer = null;
+  let jsonpCleanup = null;
+  let viewer = null;
 
   function openModal(){ document.getElementById("modalBackdrop").style.display = "block"; }
   function closeModal(){
@@ -80,9 +168,15 @@
   }
   function closeModalIfBackdrop(e){ if (e.target.id === "modalBackdrop") closeModal(); }
 
+  // -----------------------------
+  // Hotspot icon helpers
+  // -----------------------------
   function hotspotIcon(div, emoji, title){
-    div.style.width="44px"; div.style.height="44px"; div.style.borderRadius="999px";
-    div.style.display="grid"; div.style.placeItems="center";
+    div.style.width="44px";
+    div.style.height="44px";
+    div.style.borderRadius="999px";
+    div.style.display="grid";
+    div.style.placeItems="center";
     div.style.background="rgba(255,255,255,0.92)";
     div.style.boxShadow="0 10px 30px rgba(0,0,0,0.25)";
     div.style.cursor="pointer";
@@ -95,26 +189,52 @@
     hotspotIcon(div, "➜", title);
   }
 
-  // ====== Data fetch + Plotly ======
-  async function fetchSinkData(sinkName){
-    const url = `${API_BASE_URL}?sink=${encodeURIComponent(sinkName)}`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error("API error: " + res.status);
-    return await res.json();
+  // -----------------------------
+  // JSONP loader (avoids CORS issues on GitHub Pages)
+  // -----------------------------
+  function loadSinkJSONP(sinkName) {
+    return new Promise((resolve, reject) => {
+      const cbName = "cb_" + Math.random().toString(36).slice(2);
+      const script = document.createElement("script");
+
+      window[cbName] = (data) => {
+        cleanup();
+        resolve(data);
+      };
+
+      function cleanup() {
+        if (script.parentNode) script.parentNode.removeChild(script);
+        delete window[cbName];
+      }
+
+      jsonpCleanup = cleanup;
+
+      script.onerror = () => {
+        cleanup();
+        reject(new Error("JSONP load failed"));
+      };
+
+      script.src = `${API_BASE_URL}?sink=${encodeURIComponent(sinkName)}&callback=${cbName}`;
+      document.body.appendChild(script);
+    });
   }
 
+  // -----------------------------
+  // Plotly render
+  // -----------------------------
   async function renderSinkChart(sinkName){
     activeSink = sinkName;
     openModal();
+
     document.getElementById("modalTitle").textContent =
       (sinkName === "kitchen_sink") ? "🚰 Kitchen Sink Results" : "🚿 Bathroom Sink Results";
 
-    const data = await fetchSinkData(sinkName);
-    const x = data.x || [];
-    const y = data.y || [];
+    const data = await loadSinkJSONP(sinkName);
+    if (data.error) throw new Error(data.error);
 
     Plotly.react("chart", [{
-      x, y,
+      x: data.x || [],
+      y: data.y || [],
       type: "scatter",
       mode: "lines+markers",
       name: data.title || sinkName
@@ -122,7 +242,7 @@
       title: data.title || sinkName,
       margin: {l: 45, r: 20, t: 55, b: 45},
       xaxis: {title: "Time"},
-      yaxis: {title: "Value"}
+      yaxis: {title: "Value"},
     }, {responsive:true});
 
     document.getElementById("lastUpdated").textContent =
@@ -142,9 +262,26 @@
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = null;
     activeSink = null;
+    if (jsonpCleanup) { jsonpCleanup(); jsonpCleanup = null; }
   }
 
-  // ====== Init tour (3 scenes + arrows + sink hotspots) ======
+  // Exposed helpers for buttons / hotspots
+  async function openSink(sinkName){
+    try {
+      await renderSinkChart(sinkName);
+      startAutoRefresh();
+    } catch (e) {
+      alert("Could not load data: " + e.message);
+    }
+  }
+
+  function go(sceneName){
+    if (viewer) viewer.loadScene(sceneName);
+  }
+
+  // ==========================================================
+  // 3) Initialize Pannellum scenes
+  // ==========================================================
   viewer = pannellum.viewer("panorama", {
     default: {
       firstScene: "hall",
@@ -166,14 +303,15 @@
           }
         ]
       },
+
       kitchen: {
         type: "equirectangular",
         panorama: PANOS.kitchen,
-        title: "Kitchen (placeholder panorama)",
+        title: "Kitchen",
         hfov: 100,
         hotSpots: [
           // Back to hall
-          { pitch: -2, yaw: -140, type: "custom",
+          { pitch: -2, yaw: -150, type: "custom",
             createTooltipFunc: (d)=>arrowIcon(d,"Back to Hall"),
             clickHandlerFunc: ()=>viewer.loadScene("hall")
           },
@@ -182,20 +320,18 @@
             createTooltipFunc: (d)=>arrowIcon(d,"Go to Bathroom"),
             clickHandlerFunc: ()=>viewer.loadScene("bathroom")
           },
-          // Kitchen sink graph
+          // Kitchen sink chart hotspot
           { pitch: -8, yaw: 55, type: "custom",
             createTooltipFunc: (d)=>hotspotIcon(d,"🚰","Kitchen sink data"),
-            clickHandlerFunc: async ()=>{
-              try { await renderSinkChart("kitchen_sink"); startAutoRefresh(); }
-              catch (e) { alert("Could not load kitchen data. Check API URL + sheet tab name."); }
-            }
+            clickHandlerFunc: ()=>openSink("kitchen_sink")
           }
         ]
       },
+
       bathroom: {
         type: "equirectangular",
         panorama: PANOS.bathroom,
-        title: "Bathroom (placeholder panorama)",
+        title: "Bathroom",
         hfov: 100,
         hotSpots: [
           // Back to kitchen
@@ -203,18 +339,16 @@
             createTooltipFunc: (d)=>arrowIcon(d,"Back to Kitchen"),
             clickHandlerFunc: ()=>viewer.loadScene("kitchen")
           },
-          // Bathroom sink graph
+          // Bathroom sink chart hotspot
           { pitch: -8, yaw: 60, type: "custom",
             createTooltipFunc: (d)=>hotspotIcon(d,"🚿","Bathroom sink data"),
-            clickHandlerFunc: async ()=>{
-              try { await renderSinkChart("bathroom_sink"); startAutoRefresh(); }
-              catch (e) { alert("Could not load bathroom data. Check API URL + sheet tab name."); }
-            }
+            clickHandlerFunc: ()=>openSink("bathroom_sink")
           }
         ]
       }
     }
   });
+
 </script>
 </body>
 </html>
