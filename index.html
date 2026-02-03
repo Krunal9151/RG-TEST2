@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Studio Tour • Kitchen & Bathroom Results</title>
+
+  <link rel="stylesheet" href="https://cdn.pannellum.org/2.5/pannellum.css" />
+  <script src="https://cdn.pannellum.org/2.5/pannellum.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.27.0/plotly.min.js"></script>
+
+  <style>
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:#0b0c10;color:#fff}
+    #panorama{width:100vw;height:100vh}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;z-index:100;padding:18px}
+    .modal{max-width:980px;margin:60px auto;background:#fff;color:#111;border-radius:16px;overflow:hidden}
+    .modal-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:1px solid #eee}
+    .modal-header h2{margin:0;font-size:15px}
+    .modal-header button{border:0;border-radius:10px;padding:8px 10px;cursor:pointer;background:#f2f2f2}
+    .modal-body{padding:12px 14px}
+    #chart{width:100%;height:420px}
+    .hint{position:fixed;left:12px;bottom:12px;z-index:50;background:rgba(255,255,255,.08);
+      border:1px solid rgba(255,255,255,.18);backdrop-filter:blur(10px);padding:10px 12px;border-radius:14px;max-width:520px}
+    .hint b{color:#fff}
+    .muted{opacity:.85;font-size:13px;line-height:1.45}
+  </style>
+</head>
+<body>
+
+<div id="panorama"></div>
+
+<div class="hint">
+  <div style="font-weight:650;margin-bottom:6px;">Studio Tour (Demo)</div>
+  <div class="muted">
+    Use arrows to move rooms. Click:
+    <b>🚰 Kitchen sink</b> or <b>🚿 Bathroom sink</b> to open graphs.
+    Data refresh: <b>every 5 minutes</b>.
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modalBackdrop" onclick="closeModalIfBackdrop(event)">
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-header">
+      <h2 id="modalTitle">Result</h2>
+      <button onclick="closeModal()">Close ✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="chart"></div>
+      <div id="lastUpdated" style="margin-top:8px;font-size:12px;opacity:.8;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // =========================
+  // 1) SET YOUR API URL HERE
+  // =========================
+  const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwce1RCf-lByZPa0fEkC4fvUSUxzyyGS90TS5Oorj9Q13LFYDxp1BL8XypZzEj1rqUmBQ/exec"; // e.g. https://script.google.com/macros/s/XXXX/exec
+
+  // Refresh every 5 minutes
+  const REFRESH_MS = 5 * 60 * 1000;
+
+  // Placeholder online panoramas:
+  // Hall: Pannellum demo (alma.jpg)  (kitchen/bath are placeholders from Wikimedia)
+  const PANOS = {
+    hall: "https://pannellum.org/images/alma.jpg",
+    kitchen: "https://commons.wikimedia.org/wiki/Special:FilePath/Noyon_Cathedral_Interior_360x180,_Picardy,_France_-_Diliff.jpg?width=4096",
+    bathroom: "https://commons.wikimedia.org/wiki/Special:FilePath/St_Etheldreda%27s_Church_Interior_360x180,_London,_UK_-_Diliff.jpg?width=4096"
+  };
+
+  let viewer;
+  let activeSink = null;
+  let refreshTimer = null;
+
+  function openModal(){ document.getElementById("modalBackdrop").style.display = "block"; }
+  function closeModal(){
+    document.getElementById("modalBackdrop").style.display = "none";
+    stopAutoRefresh();
+  }
+  function closeModalIfBackdrop(e){ if (e.target.id === "modalBackdrop") closeModal(); }
+
+  function hotspotIcon(div, emoji, title){
+    div.style.width="44px"; div.style.height="44px"; div.style.borderRadius="999px";
+    div.style.display="grid"; div.style.placeItems="center";
+    div.style.background="rgba(255,255,255,0.92)";
+    div.style.boxShadow="0 10px 30px rgba(0,0,0,0.25)";
+    div.style.cursor="pointer";
+    div.title=title;
+    div.innerHTML=emoji;
+    div.style.fontSize="22px";
+  }
+
+  function arrowIcon(div, title){
+    hotspotIcon(div, "➜", title);
+  }
+
+  // ====== Data fetch + Plotly ======
+  async function fetchSinkData(sinkName){
+    const url = `${API_BASE_URL}?sink=${encodeURIComponent(sinkName)}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("API error: " + res.status);
+    return await res.json();
+  }
+
+  async function renderSinkChart(sinkName){
+    activeSink = sinkName;
+    openModal();
+    document.getElementById("modalTitle").textContent =
+      (sinkName === "kitchen_sink") ? "🚰 Kitchen Sink Results" : "🚿 Bathroom Sink Results";
+
+    const data = await fetchSinkData(sinkName);
+    const x = data.x || [];
+    const y = data.y || [];
+
+    Plotly.react("chart", [{
+      x, y,
+      type: "scatter",
+      mode: "lines+markers",
+      name: data.title || sinkName
+    }], {
+      title: data.title || sinkName,
+      margin: {l: 45, r: 20, t: 55, b: 45},
+      xaxis: {title: "Time"},
+      yaxis: {title: "Value"}
+    }, {responsive:true});
+
+    document.getElementById("lastUpdated").textContent =
+      "Last updated: " + new Date().toLocaleString();
+  }
+
+  function startAutoRefresh(){
+    stopAutoRefresh();
+    refreshTimer = setInterval(async () => {
+      if (!activeSink) return;
+      try { await renderSinkChart(activeSink); }
+      catch (err) { console.error(err); }
+    }, REFRESH_MS);
+  }
+
+  function stopAutoRefresh(){
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = null;
+    activeSink = null;
+  }
+
+  // ====== Init tour (3 scenes + arrows + sink hotspots) ======
+  viewer = pannellum.viewer("panorama", {
+    default: {
+      firstScene: "hall",
+      autoLoad: true,
+      showControls: true,
+      sceneFadeDuration: 700
+    },
+    scenes: {
+      hall: {
+        type: "equirectangular",
+        panorama: PANOS.hall,
+        title: "Hall",
+        hfov: 100,
+        hotSpots: [
+          // Arrow to kitchen
+          { pitch: -2, yaw: 30, type: "custom",
+            createTooltipFunc: (d)=>arrowIcon(d,"Go to Kitchen"),
+            clickHandlerFunc: ()=>viewer.loadScene("kitchen")
+          }
+        ]
+      },
+      kitchen: {
+        type: "equirectangular",
+        panorama: PANOS.kitchen,
+        title: "Kitchen (placeholder panorama)",
+        hfov: 100,
+        hotSpots: [
+          // Back to hall
+          { pitch: -2, yaw: -140, type: "custom",
+            createTooltipFunc: (d)=>arrowIcon(d,"Back to Hall"),
+            clickHandlerFunc: ()=>viewer.loadScene("hall")
+          },
+          // Arrow to bathroom
+          { pitch: -2, yaw: 20, type: "custom",
+            createTooltipFunc: (d)=>arrowIcon(d,"Go to Bathroom"),
+            clickHandlerFunc: ()=>viewer.loadScene("bathroom")
+          },
+          // Kitchen sink graph
+          { pitch: -8, yaw: 55, type: "custom",
+            createTooltipFunc: (d)=>hotspotIcon(d,"🚰","Kitchen sink data"),
+            clickHandlerFunc: async ()=>{
+              try { await renderSinkChart("kitchen_sink"); startAutoRefresh(); }
+              catch (e) { alert("Could not load kitchen data. Check API URL + sheet tab name."); }
+            }
+          }
+        ]
+      },
+      bathroom: {
+        type: "equirectangular",
+        panorama: PANOS.bathroom,
+        title: "Bathroom (placeholder panorama)",
+        hfov: 100,
+        hotSpots: [
+          // Back to kitchen
+          { pitch: -2, yaw: -160, type: "custom",
+            createTooltipFunc: (d)=>arrowIcon(d,"Back to Kitchen"),
+            clickHandlerFunc: ()=>viewer.loadScene("kitchen")
+          },
+          // Bathroom sink graph
+          { pitch: -8, yaw: 60, type: "custom",
+            createTooltipFunc: (d)=>hotspotIcon(d,"🚿","Bathroom sink data"),
+            clickHandlerFunc: async ()=>{
+              try { await renderSinkChart("bathroom_sink"); startAutoRefresh(); }
+              catch (e) { alert("Could not load bathroom data. Check API URL + sheet tab name."); }
+            }
+          }
+        ]
+      }
+    }
+  });
+</script>
+</body>
+</html>
