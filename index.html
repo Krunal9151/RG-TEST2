@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Studio Tour • Kitchen & Bathroom Results</title>
+  <title>Studio Tour • Citizen Science Dashboard</title>
 
   <!-- 360 viewer (Pannellum) -->
   <link rel="stylesheet" href="https://cdn.pannellum.org/2.5/pannellum.css" />
@@ -29,7 +29,6 @@
     }
     #panorama{ width:100vw; height:100vh; }
 
-    /* Floating hint */
     .hint{
       position:fixed;
       left:12px; bottom:12px;
@@ -39,7 +38,7 @@
       backdrop-filter: blur(10px);
       padding:10px 12px;
       border-radius:14px;
-      max-width: 560px;
+      max-width: 760px;
     }
     .hint .title{ font-weight:700; margin-bottom:6px; }
     .hint .muted{ color: var(--muted); font-size:13px; line-height:1.45; }
@@ -55,17 +54,17 @@
     }
     .btn:hover{ background: rgba(255,255,255,0.10); }
 
-    /* Modal */
     .modal-backdrop{
       position:fixed; inset:0;
       background:rgba(0,0,0,.65);
       display:none;
       z-index:100;
       padding: 18px;
+      overflow:auto;
     }
     .modal{
-      max-width: 980px;
-      margin: 50px auto;
+      max-width: 1100px;
+      margin: 30px auto;
       background:#fff;
       color:#111;
       border-radius:16px;
@@ -88,12 +87,48 @@
       background:#f2f2f2;
     }
     .modal-body{ padding: 12px 14px 14px; }
-    #chart{ width:100%; height:420px; }
-    #lastUpdated{ margin-top:8px; font-size:12px; opacity:.8; }
 
-    @media (max-width: 720px){
+    .controls{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap:10px;
+      margin-bottom:10px;
+    }
+    .control{
+      background:#fafafa;
+      border:1px solid #eee;
+      border-radius:12px;
+      padding:10px;
+    }
+    .control label{
+      display:block;
+      font-size:12px;
+      opacity:.8;
+      margin-bottom:6px;
+    }
+    .control select{
+      width:100%;
+      padding:8px 10px;
+      border-radius:10px;
+      border:1px solid #ddd;
+      background:white;
+    }
+
+    #chart{ width:100%; height:460px; }
+    #metaRow{
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      margin-top:8px;
+      font-size:12px;
+      opacity:.8;
+      flex-wrap:wrap;
+    }
+
+    @media (max-width: 900px){
+      .controls{ grid-template-columns: 1fr; }
+      #chart{ height: 360px; }
       .hint{ max-width: calc(100% - 24px); }
-      #chart{ height: 320px; }
     }
   </style>
 </head>
@@ -102,18 +137,18 @@
   <div id="panorama"></div>
 
   <div class="hint">
-    <div class="title">Studio Tour (Live Demo)</div>
+    <div class="title">Studio Tour (Citizen Science • Full Sheet)</div>
     <div class="muted">
-      Use arrows to move rooms (Hall → Kitchen → Bathroom). Click:
-      <b>🚰 Kitchen sink</b> or <b>🚿 Bathroom sink</b> to open graphs.
-      Auto-refresh: <b>every 1 minutes</b>.
+      Click sinks to open the dashboard. You can filter and choose chart type.
+      Auto-refresh: <b>every 1 minute</b>.
     </div>
     <div class="row">
       <button class="btn" onclick="go('hall')">Hall</button>
       <button class="btn" onclick="go('kitchen')">Kitchen</button>
       <button class="btn" onclick="go('bathroom')">Bathroom</button>
-      <button class="btn" onclick="openSink('kitchen_sink')">Open 🚰 Kitchen graph</button>
-      <button class="btn" onclick="openSink('bathroom_sink')">Open 🚿 Bathroom graph</button>
+      <button class="btn" onclick="openDashboard({Room:'Kitchen'})">Open Kitchen dashboard</button>
+      <button class="btn" onclick="openDashboard({Room:'Bathroom'})">Open Bathroom dashboard</button>
+      <button class="btn" onclick="openDashboard({})">Open Full dataset</button>
     </div>
   </div>
 
@@ -121,46 +156,108 @@
   <div class="modal-backdrop" id="modalBackdrop" onclick="closeModalIfBackdrop(event)">
     <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
-        <h2 id="modalTitle">Result</h2>
+        <h2 id="modalTitle">Citizen Science Dashboard</h2>
         <button onclick="closeModal()">Close ✕</button>
       </div>
       <div class="modal-body">
+
+        <div class="controls">
+          <div class="control">
+            <label>Chart type</label>
+            <select id="chartType">
+              <option value="bar">Bar (aggregated)</option>
+              <option value="scatter">Scatter</option>
+              <option value="box">Box</option>
+            </select>
+          </div>
+
+          <div class="control">
+            <label>X axis (category)</label>
+            <select id="xField"></select>
+          </div>
+
+          <div class="control">
+            <label>Y axis (numeric)</label>
+            <select id="yField">
+              <option value="Total viable count">Total viable count</option>
+              <option value="Relative frequency/percentage">Relative frequency/percentage</option>
+              <option value="Age">Age</option>
+            </select>
+          </div>
+
+          <div class="control">
+            <label>Color/Series by (optional)</label>
+            <select id="seriesField"></select>
+          </div>
+
+          <div class="control">
+            <label>Filter: Country</label>
+            <select id="fCountry"></select>
+          </div>
+
+          <div class="control">
+            <label>Filter: Household Device</label>
+            <select id="fDevice"></select>
+          </div>
+
+          <div class="control">
+            <label>Filter: Room</label>
+            <select id="fRoom"></select>
+          </div>
+
+          <div class="control">
+            <label>Filter: Sample Type</label>
+            <select id="fSample"></select>
+          </div>
+
+          <div class="control">
+            <label>Filter: Taxonomic unit</label>
+            <select id="fTaxon"></select>
+          </div>
+        </div>
+
+        <div class="row" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+          <button class="btn" style="color:#111; border-color:#ddd;" onclick="render()">Update chart</button>
+          <button class="btn" style="color:#111; border-color:#ddd;" onclick="resetFilters()">Reset filters</button>
+        </div>
+
         <div id="chart"></div>
-        <div id="lastUpdated"></div>
+        <div id="metaRow">
+          <div id="rowCount">Rows: -</div>
+          <div id="lastUpdated">Last updated: -</div>
+        </div>
       </div>
     </div>
   </div>
 
 <script>
   // ==========================================================
-  // 1) YOUR API (Apps Script Web App) - already working for you
+  // YOUR API (Apps Script Web App URL)
   // ==========================================================
-  const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwce1RCf-lByZPa0fEkC4fvUSUxzyyGS90TS5Oorj9Q13LFYDxp1BL8XypZzEj1rqUmBQ/exec";
+  const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwce1RCf-lByZPa0fEkC4fvUSUxzyyGS90TS5Oorj9Q13LFYDxp1BL8XypZzEj1rqUmBQ/exec"; // <-- change this
 
-  // Refresh every 1 minutes
+  // Refresh every 1 minute
   const REFRESH_MS = 1 * 60 * 1000;
 
-  // ==========================================================
-  // 2) YOUR 360 PHOTOS (replace with your studio apartment URLs)
-  //    Must be equirectangular 2:1 panorama JPG/PNG.
-  // ==========================================================
+  // Your panorama images
   const PANOS = {
     hall: "./assets/panos/hall.jpg",
     kitchen: "./assets/panos/kitchen.jpg",
     bathroom: "./assets/panos/bathroom.jpg"
   };
 
-  // If you currently have only one 360 image, you can do:
-  // PANOS.hall = PANOS.kitchen = PANOS.bathroom = "ONE_IMAGE_URL";
-
-  // -----------------------------
-  // Modal helpers
-  // -----------------------------
-  let activeSink = null;
+  // State
+  let viewer = null;
   let refreshTimer = null;
   let jsonpCleanup = null;
-  let viewer = null;
 
+  let allHeaders = [];
+  let allRows = [];
+  let defaultFilters = {}; // passed from hotspot (e.g. {Room:'Kitchen'})
+
+  // -----------------------------
+  // Modal
+  // -----------------------------
   function openModal(){ document.getElementById("modalBackdrop").style.display = "block"; }
   function closeModal(){
     document.getElementById("modalBackdrop").style.display = "none";
@@ -169,7 +266,7 @@
   function closeModalIfBackdrop(e){ if (e.target.id === "modalBackdrop") closeModal(); }
 
   // -----------------------------
-  // Hotspot icon helpers
+  // Hotspot icons
   // -----------------------------
   function hotspotIcon(div, emoji, title){
     div.style.width="44px";
@@ -184,104 +281,313 @@
     div.innerHTML=emoji;
     div.style.fontSize="22px";
   }
-
-  function arrowIcon(div, title){
-    hotspotIcon(div, "➜", title);
-  }
+  function arrowIcon(div, title){ hotspotIcon(div, "➜", title); }
 
   // -----------------------------
-  // JSONP loader (avoids CORS issues on GitHub Pages)
+  // JSONP loader (whole sheet)
   // -----------------------------
-  function loadSinkJSONP(sinkName) {
+  function loadAllJSONP(filtersObj) {
     return new Promise((resolve, reject) => {
       const cbName = "cb_" + Math.random().toString(36).slice(2);
       const script = document.createElement("script");
 
-      window[cbName] = (data) => {
-        cleanup();
-        resolve(data);
-      };
+      window[cbName] = (data) => { cleanup(); resolve(data); };
 
       function cleanup() {
         if (script.parentNode) script.parentNode.removeChild(script);
         delete window[cbName];
       }
-
       jsonpCleanup = cleanup;
 
-      script.onerror = () => {
-        cleanup();
-        reject(new Error("JSONP load failed"));
-      };
+      script.onerror = () => { cleanup(); reject(new Error("JSONP load failed")); };
 
-      script.src = `${API_BASE_URL}?sink=${encodeURIComponent(sinkName)}&callback=${cbName}`;
+      const filtersParam = encodeURIComponent(JSON.stringify(filtersObj || {}));
+      script.src = `${API_BASE_URL}?callback=${cbName}&filters=${filtersParam}`;
       document.body.appendChild(script);
     });
   }
 
   // -----------------------------
-  // Plotly render
+  // Helpers
   // -----------------------------
-  async function renderSinkChart(sinkName){
-    activeSink = sinkName;
-    openModal();
-
-    document.getElementById("modalTitle").textContent =
-      (sinkName === "kitchen_sink") ? "🚰 Kitchen Sink Results" : "🚿 Bathroom Sink Results";
-
-    const data = await loadSinkJSONP(sinkName);
-    if (data.error) throw new Error(data.error);
-
-    Plotly.react("chart", [{
-      x: data.x || [],
-      y: data.y || [],
-      type: "scatter",
-      mode: "lines+markers",
-      name: data.title || sinkName
-    }], {
-      title: data.title || sinkName,
-      margin: {l: 45, r: 20, t: 55, b: 45},
-      xaxis: {title: "Time"},
-      yaxis: {title: "Value"},
-    }, {responsive:true});
-
-    document.getElementById("lastUpdated").textContent =
-      "Last updated: " + new Date().toLocaleString();
+  function uniqueValues(rows, field) {
+    const s = new Set();
+    rows.forEach(r => {
+      const v = r[field];
+      if (v !== "" && v != null) s.add(String(v));
+    });
+    return ["(Any)", ...Array.from(s).sort((a,b)=>a.localeCompare(b))];
   }
 
+  function setOptions(selectId, options, keepValue=true) {
+    const el = document.getElementById(selectId);
+    const old = el.value;
+    el.innerHTML = "";
+    options.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = v;
+      el.appendChild(opt);
+    });
+    if (keepValue && options.includes(old)) el.value = old;
+  }
+
+  function getFilterValue(selectId) {
+    const v = document.getElementById(selectId).value;
+    return (v === "(Any)") ? "" : v;
+  }
+
+  function applyUIFilters(rows) {
+    const f = {
+      "Country": getFilterValue("fCountry"),
+      "Room": getFilterValue("fRoom"),
+      "Household Device": getFilterValue("fDevice"),
+      "Sample Type": getFilterValue("fSample"),
+      "Taxonomic unit": getFilterValue("fTaxon"),
+    };
+
+    return rows.filter(r => {
+      return Object.keys(f).every(k => {
+        if (!f[k]) return true;
+        return String(r[k] ?? "") === String(f[k]);
+      });
+    });
+  }
+
+  function isNumber(n){ return typeof n === "number" && Number.isFinite(n); }
+
+  // Aggregate for bar chart
+  function groupMean(rows, xField, yField, seriesField) {
+    const buckets = new Map(); // key -> {sum,count}
+    rows.forEach(r => {
+      const x = String(r[xField] ?? "");
+      const y = r[yField];
+      const s = seriesField ? String(r[seriesField] ?? "") : "";
+      if (!x || !isNumber(y)) return;
+      const key = seriesField ? `${s}|||${x}` : x;
+      const cur = buckets.get(key) || { sum:0, count:0, x, s };
+      cur.sum += y;
+      cur.count += 1;
+      buckets.set(key, cur);
+    });
+
+    const out = Array.from(buckets.values()).map(b => ({
+      x: b.x,
+      s: b.s,
+      y: b.sum / b.count,
+      n: b.count
+    }));
+
+    // sort by x label
+    out.sort((a,b)=>a.x.localeCompare(b.x));
+    return out;
+  }
+
+  // -----------------------------
+  // Dashboard open
+  // -----------------------------
+  async function openDashboard(initialFilters) {
+    defaultFilters = initialFilters || {};
+    openModal();
+
+    const titleParts = [];
+    if (defaultFilters.Room) titleParts.push(`Room = ${defaultFilters.Room}`);
+    document.getElementById("modalTitle").textContent =
+      titleParts.length ? `Citizen Science Dashboard (${titleParts.join(", ")})` : "Citizen Science Dashboard";
+
+    await fetchAndInit(defaultFilters);
+    startAutoRefresh();
+  }
+
+  async function fetchAndInit(filtersObj) {
+    const payload = await loadAllJSONP(filtersObj);
+    if (payload.error) throw new Error(payload.error);
+
+    allHeaders = payload.headers || [];
+    allRows = payload.rows || [];
+
+    // Choose categorical fields for X + series
+    // (Exclude numeric ones by name; you can adjust)
+    const numericFields = new Set(["Total viable count","Relative frequency/percentage","Age"]);
+    const categorical = allHeaders.filter(h => !numericFields.has(h));
+
+    setOptions("xField", categorical.length ? categorical : ["Room"], false);
+
+    // seriesField: allow "(None)" + categorical fields
+    setOptions("seriesField", ["(None)", ...categorical], false);
+
+    // Populate filters based on loaded dataset
+    setOptions("fCountry", uniqueValues(allRows, "Country"), false);
+    setOptions("fRoom", uniqueValues(allRows, "Room"), false);
+    setOptions("fDevice", uniqueValues(allRows, "Household Device"), false);
+    setOptions("fSample", uniqueValues(allRows, "Sample Type"), false);
+    setOptions("fTaxon", uniqueValues(allRows, "Taxonomic unit"), false);
+
+    // Apply initial filter defaults into UI (e.g., Room=Kitchen)
+    if (defaultFilters.Room) document.getElementById("fRoom").value = defaultFilters.Room;
+
+    render(payload.meta?.updatedAt);
+  }
+
+  function resetFilters(){
+    document.getElementById("fCountry").value = "(Any)";
+    document.getElementById("fRoom").value = defaultFilters.Room ? defaultFilters.Room : "(Any)";
+    document.getElementById("fDevice").value = "(Any)";
+    document.getElementById("fSample").value = "(Any)";
+    document.getElementById("fTaxon").value = "(Any)";
+    render();
+  }
+
+  // -----------------------------
+  // Render chart
+  // -----------------------------
+  function render(updatedAtIso){
+    const chartType = document.getElementById("chartType").value;
+    const xField = document.getElementById("xField").value;
+    const yField = document.getElementById("yField").value;
+    const seriesFieldRaw = document.getElementById("seriesField").value;
+    const seriesField = (seriesFieldRaw === "(None)") ? "" : seriesFieldRaw;
+
+    const rows = applyUIFilters(allRows);
+
+    document.getElementById("rowCount").textContent = `Rows: ${rows.length}`;
+    document.getElementById("lastUpdated").textContent =
+      "Last updated: " + (updatedAtIso ? new Date(updatedAtIso).toLocaleString() : new Date().toLocaleString());
+
+    // Build traces
+    let traces = [];
+
+    if (chartType === "bar") {
+      const grouped = groupMean(rows, xField, yField, seriesField);
+
+      if (seriesField) {
+        const bySeries = new Map();
+        grouped.forEach(g => {
+          const arr = bySeries.get(g.s) || [];
+          arr.push(g);
+          bySeries.set(g.s, arr);
+        });
+        traces = Array.from(bySeries.entries()).map(([s, arr]) => ({
+          type: "bar",
+          name: s || "(blank)",
+          x: arr.map(d => d.x),
+          y: arr.map(d => d.y),
+        }));
+      } else {
+        traces = [{
+          type: "bar",
+          x: grouped.map(d => d.x),
+          y: grouped.map(d => d.y),
+          name: `Mean of ${yField}`,
+        }];
+      }
+
+    } else if (chartType === "scatter") {
+      if (seriesField) {
+        const bySeries = new Map();
+        rows.forEach(r => {
+          const s = String(r[seriesField] ?? "");
+          const x = r[xField];
+          const y = r[yField];
+          if (!isNumber(y) || x === "" || x == null) return;
+          const arr = bySeries.get(s) || { x:[], y:[] };
+          arr.x.push(String(x));
+          arr.y.push(y);
+          bySeries.set(s, arr);
+        });
+        traces = Array.from(bySeries.entries()).map(([s, arr]) => ({
+          type: "scatter",
+          mode: "markers",
+          name: s || "(blank)",
+          x: arr.x,
+          y: arr.y
+        }));
+      } else {
+        const x = [], y = [];
+        rows.forEach(r => {
+          if (!isNumber(r[yField])) return;
+          if (r[xField] === "" || r[xField] == null) return;
+          x.push(String(r[xField]));
+          y.push(r[yField]);
+        });
+        traces = [{ type:"scatter", mode:"markers", x, y, name: yField }];
+      }
+
+    } else if (chartType === "box") {
+      if (seriesField) {
+        const bySeries = new Map();
+        rows.forEach(r => {
+          const s = String(r[seriesField] ?? "");
+          const y = r[yField];
+          if (!isNumber(y)) return;
+          const arr = bySeries.get(s) || [];
+          arr.push(y);
+          bySeries.set(s, arr);
+        });
+        traces = Array.from(bySeries.entries()).map(([s, arr]) => ({
+          type:"box",
+          name: s || "(blank)",
+          y: arr
+        }));
+      } else {
+        const byX = new Map();
+        rows.forEach(r => {
+          const x = String(r[xField] ?? "");
+          const y = r[yField];
+          if (!x || !isNumber(y)) return;
+          const arr = byX.get(x) || [];
+          arr.push(y);
+          byX.set(x, arr);
+        });
+        traces = Array.from(byX.entries()).map(([x, arr]) => ({
+          type:"box",
+          name: x,
+          y: arr
+        }));
+      }
+    }
+
+    Plotly.react("chart", traces, {
+      title: `${chartType.toUpperCase()} • Y: ${yField}` + (chartType === "bar" ? " (mean)" : ""),
+      margin: {l: 55, r: 20, t: 55, b: 65},
+      xaxis: { title: chartType === "box" && seriesField ? seriesField : xField, automargin:true },
+      yaxis: { title: yField, automargin:true },
+      barmode: seriesField ? "group" : "relative",
+    }, { responsive:true });
+  }
+
+  // -----------------------------
+  // Auto refresh
+  // -----------------------------
   function startAutoRefresh(){
     stopAutoRefresh();
     refreshTimer = setInterval(async () => {
-      if (!activeSink) return;
-      try { await renderSinkChart(activeSink); }
-      catch (err) { console.error(err); }
+      try {
+        // Reload with the default hotspot filters, keep UI filters as-is
+        const payload = await loadAllJSONP(defaultFilters);
+        if (payload.error) return;
+        allHeaders = payload.headers || allHeaders;
+        allRows = payload.rows || allRows;
+        render(payload.meta?.updatedAt);
+      } catch (e) {
+        console.error(e);
+      }
     }, REFRESH_MS);
   }
 
   function stopAutoRefresh(){
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = null;
-    activeSink = null;
     if (jsonpCleanup) { jsonpCleanup(); jsonpCleanup = null; }
-  }
-
-  // Exposed helpers for buttons / hotspots
-  async function openSink(sinkName){
-    try {
-      await renderSinkChart(sinkName);
-      startAutoRefresh();
-    } catch (e) {
-      alert("Could not load data: " + e.message);
-    }
   }
 
   function go(sceneName){
     if (viewer) viewer.loadScene(sceneName);
   }
 
-  // ==========================================================
-  // 3) Initialize Pannellum scenes
-  // ==========================================================
+  // -----------------------------
+  // Pannellum scenes
+  // -----------------------------
   viewer = pannellum.viewer("panorama", {
     default: {
       firstScene: "hall",
@@ -296,59 +602,50 @@
         title: "Hall",
         hfov: 100,
         hotSpots: [
-          // Arrow to kitchen
           { pitch: -2, yaw: 30, type: "custom",
             createTooltipFunc: (d)=>arrowIcon(d,"Go to Kitchen"),
             clickHandlerFunc: ()=>viewer.loadScene("kitchen")
           }
         ]
       },
-
       kitchen: {
         type: "equirectangular",
         panorama: PANOS.kitchen,
         title: "Kitchen",
         hfov: 100,
         hotSpots: [
-          // Back to hall
           { pitch: -2, yaw: -150, type: "custom",
             createTooltipFunc: (d)=>arrowIcon(d,"Back to Hall"),
             clickHandlerFunc: ()=>viewer.loadScene("hall")
           },
-          // Arrow to bathroom
           { pitch: -2, yaw: 20, type: "custom",
             createTooltipFunc: (d)=>arrowIcon(d,"Go to Bathroom"),
             clickHandlerFunc: ()=>viewer.loadScene("bathroom")
           },
-          // Kitchen sink chart hotspot
           { pitch: -8, yaw: 55, type: "custom",
-            createTooltipFunc: (d)=>hotspotIcon(d,"🚰","Kitchen sink data"),
-            clickHandlerFunc: ()=>openSink("kitchen_sink")
+            createTooltipFunc: (d)=>hotspotIcon(d,"🚰","Open Kitchen dashboard"),
+            clickHandlerFunc: ()=>openDashboard({Room:"Kitchen"})
           }
         ]
       },
-
       bathroom: {
         type: "equirectangular",
         panorama: PANOS.bathroom,
         title: "Bathroom",
         hfov: 100,
         hotSpots: [
-          // Back to kitchen
           { pitch: -2, yaw: -160, type: "custom",
             createTooltipFunc: (d)=>arrowIcon(d,"Back to Kitchen"),
             clickHandlerFunc: ()=>viewer.loadScene("kitchen")
           },
-          // Bathroom sink chart hotspot
           { pitch: -8, yaw: 60, type: "custom",
-            createTooltipFunc: (d)=>hotspotIcon(d,"🚿","Bathroom sink data"),
-            clickHandlerFunc: ()=>openSink("bathroom_sink")
+            createTooltipFunc: (d)=>hotspotIcon(d,"🚿","Open Bathroom dashboard"),
+            clickHandlerFunc: ()=>openDashboard({Room:"Bathroom"})
           }
         ]
       }
     }
   });
-
 </script>
 </body>
 </html>
