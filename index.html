@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Studio Tour • Citizen Science Dashboard</title>
+  <title>Studio Tour • Citizen Science (Rooms)</title>
 
   <!-- 360 viewer (Pannellum) -->
   <link rel="stylesheet" href="https://cdn.pannellum.org/2.5/pannellum.css" />
@@ -38,7 +38,7 @@
       backdrop-filter: blur(10px);
       padding:10px 12px;
       border-radius:14px;
-      max-width: 760px;
+      max-width: 820px;
     }
     .hint .title{ font-weight:700; margin-bottom:6px; }
     .hint .muted{ color: var(--muted); font-size:13px; line-height:1.45; }
@@ -54,6 +54,7 @@
     }
     .btn:hover{ background: rgba(255,255,255,0.10); }
 
+    /* Modal */
     .modal-backdrop{
       position:fixed; inset:0;
       background:rgba(0,0,0,.65);
@@ -137,17 +138,17 @@
   <div id="panorama"></div>
 
   <div class="hint">
-    <div class="title">Studio Tour (Citizen Science • Full Sheet)</div>
+    <div class="title">Studio Tour (Google Sheet • Room-based)</div>
     <div class="muted">
-      Click sinks to open the dashboard. You can filter and choose chart type.
+      Click sinks to load charts filtered by <b>Room</b> = Kitchen / Bathroom from your Google Sheet.
       Auto-refresh: <b>every 1 minute</b>.
     </div>
     <div class="row">
       <button class="btn" onclick="go('hall')">Hall</button>
       <button class="btn" onclick="go('kitchen')">Kitchen</button>
       <button class="btn" onclick="go('bathroom')">Bathroom</button>
-      <button class="btn" onclick="openDashboard({Room:'Kitchen'})">Open Kitchen dashboard</button>
-      <button class="btn" onclick="openDashboard({Room:'Bathroom'})">Open Bathroom dashboard</button>
+      <button class="btn" onclick="openDashboard({Room:'Kitchen'})">Open 🚰 Kitchen</button>
+      <button class="btn" onclick="openDashboard({Room:'Bathroom'})">Open 🚿 Bathroom</button>
       <button class="btn" onclick="openDashboard({})">Open Full dataset</button>
     </div>
   </div>
@@ -156,7 +157,7 @@
   <div class="modal-backdrop" id="modalBackdrop" onclick="closeModalIfBackdrop(event)">
     <div class="modal" role="dialog" aria-modal="true">
       <div class="modal-header">
-        <h2 id="modalTitle">Citizen Science Dashboard</h2>
+        <h2 id="modalTitle">Dashboard</h2>
         <button onclick="closeModal()">Close ✕</button>
       </div>
       <div class="modal-body">
@@ -165,60 +166,29 @@
           <div class="control">
             <label>Chart type</label>
             <select id="chartType">
-              <option value="bar">Bar (aggregated)</option>
-              <option value="scatter">Scatter</option>
-              <option value="box">Box</option>
+              <option value="bar">Bar (Mean)</option>
+              <option value="scatter">Scatter (All points)</option>
+              <option value="box">Box (Distribution)</option>
             </select>
           </div>
 
           <div class="control">
-            <label>X axis (category)</label>
-            <select id="xField"></select>
-          </div>
-
-          <div class="control">
-            <label>Y axis (numeric)</label>
+            <label>Y value (numeric)</label>
             <select id="yField">
               <option value="Total viable count">Total viable count</option>
               <option value="Relative frequency/percentage">Relative frequency/percentage</option>
-              <option value="Age">Age</option>
             </select>
           </div>
 
           <div class="control">
-            <label>Color/Series by (optional)</label>
-            <select id="seriesField"></select>
-          </div>
-
-          <div class="control">
-            <label>Filter: Country</label>
-            <select id="fCountry"></select>
-          </div>
-
-          <div class="control">
-            <label>Filter: Household Device</label>
-            <select id="fDevice"></select>
-          </div>
-
-          <div class="control">
-            <label>Filter: Room</label>
-            <select id="fRoom"></select>
-          </div>
-
-          <div class="control">
-            <label>Filter: Sample Type</label>
-            <select id="fSample"></select>
-          </div>
-
-          <div class="control">
-            <label>Filter: Taxonomic unit</label>
-            <select id="fTaxon"></select>
+            <label>Group by (X / categories)</label>
+            <select id="groupField"></select>
           </div>
         </div>
 
         <div class="row" style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
           <button class="btn" style="color:#111; border-color:#ddd;" onclick="render()">Update chart</button>
-          <button class="btn" style="color:#111; border-color:#ddd;" onclick="resetFilters()">Reset filters</button>
+          <button class="btn" style="color:#111; border-color:#ddd;" onclick="resetControls()">Reset</button>
         </div>
 
         <div id="chart"></div>
@@ -226,20 +196,23 @@
           <div id="rowCount">Rows: -</div>
           <div id="lastUpdated">Last updated: -</div>
         </div>
+
       </div>
     </div>
   </div>
 
 <script>
   // ==========================================================
-  // YOUR API (Apps Script Web App URL)
+  // 1) PUT YOUR APPS SCRIPT WEB APP URL HERE
   // ==========================================================
-  const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwce1RCf-lByZPa0fEkC4fvUSUxzyyGS90TS5Oorj9Q13LFYDxp1BL8XypZzEj1rqUmBQ/exec"; // <-- change this
+  const API_BASE_URL = "https://script.google.com/macros/s/AKfycbwce1RCf-lByZPa0fEkC4fvUSUxzyyGS90TS5Oorj9Q13LFYDxp1BL8XypZzEj1rqUmBQ/exec"; // <-- replace
 
   // Refresh every 1 minute
   const REFRESH_MS = 1 * 60 * 1000;
 
-  // Your panorama images
+  // ==========================================================
+  // 2) YOUR 360 PHOTOS
+  // ==========================================================
   const PANOS = {
     hall: "./assets/panos/hall.jpg",
     kitchen: "./assets/panos/kitchen.jpg",
@@ -253,7 +226,7 @@
 
   let allHeaders = [];
   let allRows = [];
-  let defaultFilters = {}; // passed from hotspot (e.g. {Room:'Kitchen'})
+  let baseFilters = {}; // {Room:'Kitchen'} or {Room:'Bathroom'} from hotspot/button
 
   // -----------------------------
   // Modal
@@ -284,9 +257,12 @@
   function arrowIcon(div, title){ hotspotIcon(div, "➜", title); }
 
   // -----------------------------
-  // JSONP loader (whole sheet)
+  // JSONP loader
+  // API must support:
+  //   ?callback=cbName&filters=<json>
+  // Returns: {headers:[], rows:[], meta:{updatedAt,rowCount}}
   // -----------------------------
-  function loadAllJSONP(filtersObj) {
+  function loadRowsJSONP(filtersObj) {
     return new Promise((resolve, reject) => {
       const cbName = "cb_" + Math.random().toString(36).slice(2);
       const script = document.createElement("script");
@@ -308,20 +284,12 @@
   }
 
   // -----------------------------
-  // Helpers
+  // Utils
   // -----------------------------
-  function uniqueValues(rows, field) {
-    const s = new Set();
-    rows.forEach(r => {
-      const v = r[field];
-      if (v !== "" && v != null) s.add(String(v));
-    });
-    return ["(Any)", ...Array.from(s).sort((a,b)=>a.localeCompare(b))];
-  }
+  function isNumber(n){ return typeof n === "number" && Number.isFinite(n); }
 
-  function setOptions(selectId, options, keepValue=true) {
+  function setOptions(selectId, options, preferredValue) {
     const el = document.getElementById(selectId);
-    const old = el.value;
     el.innerHTML = "";
     options.forEach(v => {
       const opt = document.createElement("option");
@@ -329,242 +297,82 @@
       opt.textContent = v;
       el.appendChild(opt);
     });
-    if (keepValue && options.includes(old)) el.value = old;
+    if (preferredValue && options.includes(preferredValue)) el.value = preferredValue;
   }
 
-  function getFilterValue(selectId) {
-    const v = document.getElementById(selectId).value;
-    return (v === "(Any)") ? "" : v;
-  }
-
-  function applyUIFilters(rows) {
-    const f = {
-      "Country": getFilterValue("fCountry"),
-      "Room": getFilterValue("fRoom"),
-      "Household Device": getFilterValue("fDevice"),
-      "Sample Type": getFilterValue("fSample"),
-      "Taxonomic unit": getFilterValue("fTaxon"),
-    };
-
-    return rows.filter(r => {
-      return Object.keys(f).every(k => {
-        if (!f[k]) return true;
-        return String(r[k] ?? "") === String(f[k]);
-      });
-    });
-  }
-
-  function isNumber(n){ return typeof n === "number" && Number.isFinite(n); }
-
-  // Aggregate for bar chart
-  function groupMean(rows, xField, yField, seriesField) {
-    const buckets = new Map(); // key -> {sum,count}
+  function groupMean(rows, groupField, yField) {
+    const m = new Map(); // group -> {sum,count}
     rows.forEach(r => {
-      const x = String(r[xField] ?? "");
+      const g = String(r[groupField] ?? "").trim();
       const y = r[yField];
-      const s = seriesField ? String(r[seriesField] ?? "") : "";
-      if (!x || !isNumber(y)) return;
-      const key = seriesField ? `${s}|||${x}` : x;
-      const cur = buckets.get(key) || { sum:0, count:0, x, s };
+      if (!g || !isNumber(y)) return;
+      const cur = m.get(g) || { sum:0, count:0 };
       cur.sum += y;
       cur.count += 1;
-      buckets.set(key, cur);
+      m.set(g, cur);
     });
 
-    const out = Array.from(buckets.values()).map(b => ({
-      x: b.x,
-      s: b.s,
-      y: b.sum / b.count,
-      n: b.count
-    }));
+    const labels = Array.from(m.keys()).sort((a,b)=>a.localeCompare(b));
+    const values = labels.map(k => m.get(k).sum / m.get(k).count);
+    return { labels, values };
+  }
 
-    // sort by x label
-    out.sort((a,b)=>a.x.localeCompare(b.x));
-    return out;
+  function groupPoints(rows, groupField, yField) {
+    const byGroup = new Map(); // group -> array of y
+    rows.forEach(r => {
+      const g = String(r[groupField] ?? "").trim();
+      const y = r[yField];
+      if (!g || !isNumber(y)) return;
+      const arr = byGroup.get(g) || [];
+      arr.push(y);
+      byGroup.set(g, arr);
+    });
+    return byGroup;
   }
 
   // -----------------------------
-  // Dashboard open
+  // Dashboard open + refresh
   // -----------------------------
-  async function openDashboard(initialFilters) {
-    defaultFilters = initialFilters || {};
+  async function openDashboard(filters) {
+    baseFilters = filters || {};
     openModal();
 
-    const titleParts = [];
-    if (defaultFilters.Room) titleParts.push(`Room = ${defaultFilters.Room}`);
-    document.getElementById("modalTitle").textContent =
-      titleParts.length ? `Citizen Science Dashboard (${titleParts.join(", ")})` : "Citizen Science Dashboard";
+    const title =
+      baseFilters.Room ? `Dashboard (Room = ${baseFilters.Room})` : "Dashboard (All Rooms)";
+    document.getElementById("modalTitle").textContent = title;
 
-    await fetchAndInit(defaultFilters);
+    await fetchAndInit();
     startAutoRefresh();
   }
 
-  async function fetchAndInit(filtersObj) {
-    const payload = await loadAllJSONP(filtersObj);
+  async function fetchAndInit() {
+    const payload = await loadRowsJSONP(baseFilters);
     if (payload.error) throw new Error(payload.error);
 
     allHeaders = payload.headers || [];
     allRows = payload.rows || [];
 
-    // Choose categorical fields for X + series
-    // (Exclude numeric ones by name; you can adjust)
-    const numericFields = new Set(["Total viable count","Relative frequency/percentage","Age"]);
-    const categorical = allHeaders.filter(h => !numericFields.has(h));
+    // Group-by options (everything except numeric)
+    const numeric = new Set(["Total viable count", "Relative frequency/percentage", "Age"]);
+    const groupCandidates = allHeaders.filter(h => !numeric.has(h));
 
-    setOptions("xField", categorical.length ? categorical : ["Room"], false);
+    // Prefer a meaningful default
+    const preferred =
+      groupCandidates.includes("Household Device") ? "Household Device" :
+      groupCandidates.includes("Sample Type") ? "Sample Type" :
+      groupCandidates.includes("Taxonomic unit") ? "Taxonomic unit" :
+      groupCandidates[0];
 
-    // seriesField: allow "(None)" + categorical fields
-    setOptions("seriesField", ["(None)", ...categorical], false);
-
-    // Populate filters based on loaded dataset
-    setOptions("fCountry", uniqueValues(allRows, "Country"), false);
-    setOptions("fRoom", uniqueValues(allRows, "Room"), false);
-    setOptions("fDevice", uniqueValues(allRows, "Household Device"), false);
-    setOptions("fSample", uniqueValues(allRows, "Sample Type"), false);
-    setOptions("fTaxon", uniqueValues(allRows, "Taxonomic unit"), false);
-
-    // Apply initial filter defaults into UI (e.g., Room=Kitchen)
-    if (defaultFilters.Room) document.getElementById("fRoom").value = defaultFilters.Room;
+    setOptions("groupField", groupCandidates.length ? groupCandidates : ["Household Device"], preferred);
 
     render(payload.meta?.updatedAt);
   }
 
-  function resetFilters(){
-    document.getElementById("fCountry").value = "(Any)";
-    document.getElementById("fRoom").value = defaultFilters.Room ? defaultFilters.Room : "(Any)";
-    document.getElementById("fDevice").value = "(Any)";
-    document.getElementById("fSample").value = "(Any)";
-    document.getElementById("fTaxon").value = "(Any)";
-    render();
-  }
-
-  // -----------------------------
-  // Render chart
-  // -----------------------------
-  function render(updatedAtIso){
-    const chartType = document.getElementById("chartType").value;
-    const xField = document.getElementById("xField").value;
-    const yField = document.getElementById("yField").value;
-    const seriesFieldRaw = document.getElementById("seriesField").value;
-    const seriesField = (seriesFieldRaw === "(None)") ? "" : seriesFieldRaw;
-
-    const rows = applyUIFilters(allRows);
-
-    document.getElementById("rowCount").textContent = `Rows: ${rows.length}`;
-    document.getElementById("lastUpdated").textContent =
-      "Last updated: " + (updatedAtIso ? new Date(updatedAtIso).toLocaleString() : new Date().toLocaleString());
-
-    // Build traces
-    let traces = [];
-
-    if (chartType === "bar") {
-      const grouped = groupMean(rows, xField, yField, seriesField);
-
-      if (seriesField) {
-        const bySeries = new Map();
-        grouped.forEach(g => {
-          const arr = bySeries.get(g.s) || [];
-          arr.push(g);
-          bySeries.set(g.s, arr);
-        });
-        traces = Array.from(bySeries.entries()).map(([s, arr]) => ({
-          type: "bar",
-          name: s || "(blank)",
-          x: arr.map(d => d.x),
-          y: arr.map(d => d.y),
-        }));
-      } else {
-        traces = [{
-          type: "bar",
-          x: grouped.map(d => d.x),
-          y: grouped.map(d => d.y),
-          name: `Mean of ${yField}`,
-        }];
-      }
-
-    } else if (chartType === "scatter") {
-      if (seriesField) {
-        const bySeries = new Map();
-        rows.forEach(r => {
-          const s = String(r[seriesField] ?? "");
-          const x = r[xField];
-          const y = r[yField];
-          if (!isNumber(y) || x === "" || x == null) return;
-          const arr = bySeries.get(s) || { x:[], y:[] };
-          arr.x.push(String(x));
-          arr.y.push(y);
-          bySeries.set(s, arr);
-        });
-        traces = Array.from(bySeries.entries()).map(([s, arr]) => ({
-          type: "scatter",
-          mode: "markers",
-          name: s || "(blank)",
-          x: arr.x,
-          y: arr.y
-        }));
-      } else {
-        const x = [], y = [];
-        rows.forEach(r => {
-          if (!isNumber(r[yField])) return;
-          if (r[xField] === "" || r[xField] == null) return;
-          x.push(String(r[xField]));
-          y.push(r[yField]);
-        });
-        traces = [{ type:"scatter", mode:"markers", x, y, name: yField }];
-      }
-
-    } else if (chartType === "box") {
-      if (seriesField) {
-        const bySeries = new Map();
-        rows.forEach(r => {
-          const s = String(r[seriesField] ?? "");
-          const y = r[yField];
-          if (!isNumber(y)) return;
-          const arr = bySeries.get(s) || [];
-          arr.push(y);
-          bySeries.set(s, arr);
-        });
-        traces = Array.from(bySeries.entries()).map(([s, arr]) => ({
-          type:"box",
-          name: s || "(blank)",
-          y: arr
-        }));
-      } else {
-        const byX = new Map();
-        rows.forEach(r => {
-          const x = String(r[xField] ?? "");
-          const y = r[yField];
-          if (!x || !isNumber(y)) return;
-          const arr = byX.get(x) || [];
-          arr.push(y);
-          byX.set(x, arr);
-        });
-        traces = Array.from(byX.entries()).map(([x, arr]) => ({
-          type:"box",
-          name: x,
-          y: arr
-        }));
-      }
-    }
-
-    Plotly.react("chart", traces, {
-      title: `${chartType.toUpperCase()} • Y: ${yField}` + (chartType === "bar" ? " (mean)" : ""),
-      margin: {l: 55, r: 20, t: 55, b: 65},
-      xaxis: { title: chartType === "box" && seriesField ? seriesField : xField, automargin:true },
-      yaxis: { title: yField, automargin:true },
-      barmode: seriesField ? "group" : "relative",
-    }, { responsive:true });
-  }
-
-  // -----------------------------
-  // Auto refresh
-  // -----------------------------
   function startAutoRefresh(){
     stopAutoRefresh();
     refreshTimer = setInterval(async () => {
       try {
-        // Reload with the default hotspot filters, keep UI filters as-is
-        const payload = await loadAllJSONP(defaultFilters);
+        const payload = await loadRowsJSONP(baseFilters);
         if (payload.error) return;
         allHeaders = payload.headers || allHeaders;
         allRows = payload.rows || allRows;
@@ -581,12 +389,81 @@
     if (jsonpCleanup) { jsonpCleanup(); jsonpCleanup = null; }
   }
 
+  function resetControls(){
+    document.getElementById("chartType").value = "bar";
+    document.getElementById("yField").value = "Total viable count";
+    // keep groupField as-is (or you can reset to first option)
+    render();
+  }
+
+  // -----------------------------
+  // Render chart (Room filtered via API)
+  // -----------------------------
+  function render(updatedAtIso){
+    const chartType = document.getElementById("chartType").value;
+    const yField = document.getElementById("yField").value;
+    const groupField = document.getElementById("groupField").value;
+
+    document.getElementById("rowCount").textContent = `Rows: ${allRows.length}`;
+    document.getElementById("lastUpdated").textContent =
+      "Last updated: " + (updatedAtIso ? new Date(updatedAtIso).toLocaleString() : new Date().toLocaleString());
+
+    let traces = [];
+
+    if (chartType === "bar") {
+      const { labels, values } = groupMean(allRows, groupField, yField);
+      traces = [{
+        type: "bar",
+        x: labels,
+        y: values,
+        name: `Mean of ${yField}`
+      }];
+
+    } else if (chartType === "scatter") {
+      // plot all points (x=group category)
+      const x = [], y = [];
+      allRows.forEach(r => {
+        const g = String(r[groupField] ?? "").trim();
+        const val = r[yField];
+        if (!g || !isNumber(val)) return;
+        x.push(g);
+        y.push(val);
+      });
+      traces = [{
+        type: "scatter",
+        mode: "markers",
+        x, y,
+        name: yField
+      }];
+
+    } else if (chartType === "box") {
+      // one box per group
+      const byGroup = groupPoints(allRows, groupField, yField);
+      const groups = Array.from(byGroup.keys()).sort((a,b)=>a.localeCompare(b));
+      traces = groups.map(g => ({
+        type: "box",
+        name: g,
+        y: byGroup.get(g)
+      }));
+    }
+
+    Plotly.react("chart", traces, {
+      title: `${chartType.toUpperCase()} • Room: ${baseFilters.Room || "All"} • Group: ${groupField} • Y: ${yField}`,
+      margin: {l: 55, r: 20, t: 65, b: 75},
+      xaxis: { title: groupField, automargin:true },
+      yaxis: { title: yField, automargin:true },
+    }, { responsive:true });
+  }
+
+  // -----------------------------
+  // Navigation
+  // -----------------------------
   function go(sceneName){
     if (viewer) viewer.loadScene(sceneName);
   }
 
   // -----------------------------
-  // Pannellum scenes
+  // Pannellum scenes (same flow)
   // -----------------------------
   viewer = pannellum.viewer("panorama", {
     default: {
@@ -608,6 +485,7 @@
           }
         ]
       },
+
       kitchen: {
         type: "equirectangular",
         panorama: PANOS.kitchen,
@@ -623,11 +501,12 @@
             clickHandlerFunc: ()=>viewer.loadScene("bathroom")
           },
           { pitch: -8, yaw: 55, type: "custom",
-            createTooltipFunc: (d)=>hotspotIcon(d,"🚰","Open Kitchen dashboard"),
+            createTooltipFunc: (d)=>hotspotIcon(d,"🚰","Open Kitchen (Room=Kitchen)"),
             clickHandlerFunc: ()=>openDashboard({Room:"Kitchen"})
           }
         ]
       },
+
       bathroom: {
         type: "equirectangular",
         panorama: PANOS.bathroom,
@@ -639,7 +518,7 @@
             clickHandlerFunc: ()=>viewer.loadScene("kitchen")
           },
           { pitch: -8, yaw: 60, type: "custom",
-            createTooltipFunc: (d)=>hotspotIcon(d,"🚿","Open Bathroom dashboard"),
+            createTooltipFunc: (d)=>hotspotIcon(d,"🚿","Open Bathroom (Room=Bathroom)"),
             clickHandlerFunc: ()=>openDashboard({Room:"Bathroom"})
           }
         ]
